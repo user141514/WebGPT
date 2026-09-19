@@ -1,5 +1,5 @@
 import { mergeCatalogs } from '../catalog.js';
-import { catalogGroups, conversationFromUrl, conversationTarget, hasBoundConversation, initialConversationUrl } from './catalog-view.js';
+import { catalogGroups, catalogGroupsWithLoading, conversationFromUrl, conversationTarget, hasBoundConversation, initialConversationUrl, loadingCatalogGroupId } from './catalog-view.js';
 import { defaultExpandedCatalogGroups, ensureActiveCatalogGroupExpanded, normalizeExpandedCatalogGroups, parseExpandedCatalogGroups, serializeExpandedCatalogGroups, toggleCatalogGroup } from './catalog-tree.js';
 import { isNearConversationBottom, shouldFollowConversationOutput, snapshotToTranscriptTurns } from './conversation-view.js';
 import { bindStatusView } from './bind-status.js';
@@ -9,8 +9,11 @@ import { SelectionEpoch } from './selection-epoch.js';
 import { CLIENT_SOURCE, EXTENSION_SOURCE, clientBridgeHelloMessage } from './protocol.js';
 import { initialClientState, ProviderEventFrameBuffer, reduceClientState } from './state.js';
 import { liveStatusPayload, smokePromptFromUrl } from './smoke.js';
+import { nextTheme, normalizeTheme, themeToggleView } from './theme.js';
 const ACTIVE_URL_KEY = 'chatgpt-web-driver.active-conversation-url';
 const CATALOG_TREE_KEY = 'chatgpt-web-driver.catalog-tree.expanded';
+const SIDEBAR_COLLAPSED_KEY = 'chatgpt-web-driver.sidebar-collapsed';
+const THEME_KEY = 'chatgpt-web-driver.theme';
 const EMPTY_CATALOG = { projects: [], conversations: [] };
 function required(selector) {
     const element = document.querySelector(selector);
@@ -37,6 +40,9 @@ const conversationUrlInput = required('#conversation-url-input');
 const bindStatusElement = required('#bind-status');
 const bindStatusTitle = required('#bind-status-title');
 const bindStatusDetail = required('#bind-status-detail');
+const sidebarToggle = required('#sidebar-toggle');
+const sidebarCollapse = required('#sidebar-collapse');
+const themeToggle = required('#theme-toggle');
 let state = initialClientState();
 const turns = [];
 let activeTurn = null;
@@ -50,10 +56,16 @@ let expandedCatalogGroups = parseExpandedCatalogGroups(localStorage.getItem(CATA
 let catalogExpansionInitialized = localStorage.getItem(CATALOG_TREE_KEY) !== null;
 let catalogBusy = false;
 let conversationLoading = false;
+let conversationLoadingUrl = null;
 let historyHydrated = false;
 let historyMessageCount = 0;
 let catalogBootstrapped = false;
 let catalogStatusText = 'Waiting for extension…';
+let sidebarCollapsed = localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true';
+let theme = normalizeTheme(localStorage.getItem(THEME_KEY));
+if (localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === null && window.matchMedia('(max-width: 760px)').matches) {
+    sidebarCollapsed = true;
+}
 const pendingCatalogRequests = new Map();
 const pendingConversationRequests = new Map();
 const selectionEpoch = new SelectionEpoch();
@@ -72,6 +84,32 @@ function appendEvent(value) {
     while (eventLog.children.length > 100)
         eventLog.firstElementChild?.remove();
     eventLog.scrollTop = eventLog.scrollHeight;
+}
+function applyTheme() {
+    document.body.dataset.theme = theme;
+    const view = themeToggleView(theme);
+    themeToggle.textContent = view.icon;
+    themeToggle.setAttribute('aria-label', view.label);
+    themeToggle.setAttribute('title', view.label);
+    themeToggle.setAttribute('aria-pressed', String(view.pressed));
+}
+function setTheme(next) {
+    theme = next;
+    localStorage.setItem(THEME_KEY, theme);
+    applyTheme();
+}
+function applySidebarState() {
+    document.body.dataset.sidebarCollapsed = String(sidebarCollapsed);
+    sidebarToggle.setAttribute('aria-expanded', String(!sidebarCollapsed));
+}
+function setSidebarCollapsed(collapsed) {
+    sidebarCollapsed = collapsed;
+    localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(collapsed));
+    applySidebarState();
+}
+function resizeComposer() {
+    textarea.style.height = '0px';
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 190)}px`;
 }
 function markTranscriptDirty(forceFollow = false) {
     transcriptDirty = true;
@@ -210,7 +248,7 @@ function expandActiveCatalogGroup() {
 }
 function renderCatalog() {
     catalogList.replaceChildren();
-    const groups = catalogGroups(catalog);
+    const groups = catalogGroupsWithLoading(catalog, conversationLoadingUrl);
     if (!groups.length) {
         const empty = document.createElement('div');
         empty.className = 'catalog-status';
@@ -218,6 +256,7 @@ function renderCatalog() {
         catalogList.append(empty);
         return;
     }
+    const loadingGroupId = loadingCatalogGroupId(conversationLoadingUrl);
     for (const group of groups) {
         const section = document.createElement('section');
         section.className = 'catalog-group';
@@ -225,11 +264,11 @@ function renderCatalog() {
         const expanded = expandedCatalogGroups.has(group.id);
         const activeInGroup = group.conversations.some((conversation) => conversation.url === activeConversationUrl);
         section.dataset.active = String(activeInGroup);
+        section.dataset.loading = String(group.id === loadingGroupId);
         const toggle = document.createElement('button');
         toggle.type = 'button';
         toggle.className = 'catalog-group-toggle';
         toggle.setAttribute('aria-expanded', String(expanded));
-        toggle.disabled = catalogBusy;
         toggle.addEventListener('click', () => {
             expandedCatalogGroups = toggleCatalogGroup(expandedCatalogGroups, group.id);
             persistCatalogExpansion();
@@ -243,7 +282,10 @@ function renderCatalog() {
         label.textContent = group.title;
         const count = document.createElement('span');
         count.className = 'catalog-group-count';
-        count.textContent = group.conversations.length ? String(group.conversations.length) : '—';
+        const groupLoading = group.id === loadingGroupId;
+        count.dataset.loading = String(groupLoading);
+        count.setAttribute('aria-label', groupLoading ? 'Loading conversation' : `${group.conversations.length} conversations`);
+        count.textContent = groupLoading ? '' : (group.conversations.length ? String(group.conversations.length) : '—');
         toggle.append(chevron, label, count);
         section.append(toggle);
         const children = document.createElement('div');
@@ -262,7 +304,7 @@ function renderCatalog() {
             button.textContent = conversation.title;
             button.title = conversation.url;
             button.dataset.active = String(activeConversationUrl === conversation.url);
-            button.disabled = busy(state.phase) || conversationLoading || catalogBusy;
+            button.disabled = busy(state.phase) || conversationLoading;
             button.addEventListener('click', () => selectConversation(conversation));
             children.append(button);
         }
@@ -413,6 +455,7 @@ async function resolveConversation(url, titleHint, mode = 'bind') {
     const selectionToken = selectionEpoch.begin();
     const previousUrl = activeConversationUrl;
     conversationLoading = true;
+    conversationLoadingUrl = direct.url;
     bindStatus = { state: 'binding', url: direct.url };
     catalogStatusText = mode === 'navigate'
         ? 'Switching the existing ChatGPT tab…'
@@ -425,6 +468,7 @@ async function resolveConversation(url, titleHint, mode = 'bind') {
         return;
     if (!result.ok) {
         conversationLoading = false;
+        conversationLoadingUrl = null;
         bindStatus = { state: 'error', error: result.error };
         catalogStatusText = result.error;
         render();
@@ -449,6 +493,7 @@ async function resolveConversation(url, titleHint, mode = 'bind') {
     activeTurn = null;
     markTranscriptDirty(true);
     conversationLoading = false;
+    conversationLoadingUrl = null;
     bindStatus = {
         state: 'bound',
         title: activeConversationTitle,
@@ -539,6 +584,7 @@ form.addEventListener('submit', (event) => {
     turns.push(activeTurn);
     markTranscriptDirty(true);
     textarea.value = '';
+    resizeComposer();
     dispatch({ type: 'submit.local', clientRequestId });
     appendEvent({
         source: CLIENT_SOURCE,
@@ -564,12 +610,19 @@ conversationUrlForm.addEventListener('submit', (event) => {
 catalogRefresh.addEventListener('click', () => {
     void loadCatalog();
 });
+sidebarToggle.addEventListener('click', () => setSidebarCollapsed(!sidebarCollapsed));
+sidebarCollapse.addEventListener('click', () => setSidebarCollapsed(true));
+themeToggle.addEventListener('click', () => setTheme(nextTheme(theme)));
+textarea.addEventListener('input', resizeComposer);
 textarea.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' && !event.shiftKey) {
         event.preventDefault();
         form.requestSubmit();
     }
 });
+applyTheme();
+applySidebarState();
+resizeComposer();
 sendHello();
 window.setInterval(() => {
     sendHello();

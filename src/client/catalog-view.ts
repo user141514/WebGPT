@@ -68,6 +68,33 @@ export function conversationFromUrl(url: string, title?: string): CatalogConvers
   };
 }
 
+export function loadingCatalogGroupId(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const conversation = conversationFromUrl(url);
+  if (!conversation) return null;
+  return conversation.projectId ?? 'standalone';
+}
+
+export function catalogGroupsWithLoading(
+  catalog: ConversationCatalog,
+  loadingUrl: string | null | undefined
+): CatalogGroup[] {
+  const groups = catalogGroups(catalog);
+  const loadingId = loadingCatalogGroupId(loadingUrl);
+  if (!loadingId || groups.some((group) => group.id === loadingId)) return groups;
+
+  if (loadingId === 'standalone') {
+    return [{ id: 'standalone', title: 'Chats', conversations: [] }, ...groups];
+  }
+
+  return [{
+    id: loadingId,
+    title: 'Binding project…',
+    projectId: loadingId,
+    conversations: []
+  }, ...groups];
+}
+
 export function hasBoundConversation(url: string | null | undefined): boolean {
   return Boolean(url && conversationFromUrl(url));
 }

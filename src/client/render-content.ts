@@ -37,6 +37,62 @@ function appendInline(document: Document, parent: Element, content: SemanticInli
   for (const inline of content) parent.append(renderInline(document, inline));
 }
 
+function copyText(document: Document, text: string, button: HTMLButtonElement): void {
+  const navigator = document.defaultView?.navigator;
+  if (!navigator?.clipboard?.writeText) {
+    button.textContent = 'Unavailable';
+    return;
+  }
+
+  button.disabled = true;
+  void navigator.clipboard.writeText(text)
+    .then(() => {
+      button.textContent = 'Copied';
+    })
+    .catch(() => {
+      button.textContent = 'Copy failed';
+    })
+    .finally(() => {
+      document.defaultView?.setTimeout(() => {
+        button.disabled = false;
+        button.textContent = 'Copy';
+      }, 1_200);
+    });
+}
+
+function renderCodeBlock(
+  document: Document,
+  block: Extract<SemanticBlock, { type: 'code' }>
+): HTMLElement {
+  const shell = document.createElement('div');
+  shell.className = 'code-shell';
+
+  const header = document.createElement('div');
+  header.className = 'code-header';
+
+  const language = document.createElement('span');
+  language.className = 'code-language';
+  language.textContent = block.language?.trim() || 'code';
+
+  const copy = document.createElement('button');
+  copy.type = 'button';
+  copy.className = 'code-copy';
+  copy.textContent = 'Copy';
+  copy.setAttribute('aria-label', 'Copy code');
+  copy.addEventListener('click', () => copyText(document, block.code, copy));
+
+  const pre = document.createElement('pre');
+  pre.className = 'code-block';
+  const code = document.createElement('code');
+  if (block.language) code.dataset.language = block.language;
+  code.textContent = block.code;
+  pre.append(code);
+
+  header.append(language, copy);
+  shell.append(header, pre);
+  return shell;
+}
+
 function renderTable(document: Document, block: Extract<SemanticBlock, { type: 'table' }>): HTMLElement {
   const wrap = document.createElement('div');
   wrap.className = 'table-wrap';
@@ -80,15 +136,7 @@ function renderBlock(document: Document, block: SemanticBlock): HTMLElement {
     appendInline(document, heading, block.content);
     return heading;
   }
-  if (block.type === 'code') {
-    const pre = document.createElement('pre');
-    pre.className = 'code-block';
-    const code = document.createElement('code');
-    if (block.language) code.dataset.language = block.language;
-    code.textContent = block.code;
-    pre.append(code);
-    return pre;
-  }
+  if (block.type === 'code') return renderCodeBlock(document, block);
   if (block.type === 'list') {
     const list = document.createElement(block.ordered ? 'ol' : 'ul');
     for (const item of block.items) {
@@ -110,7 +158,9 @@ function renderBlock(document: Document, block: SemanticBlock): HTMLElement {
     math.textContent = `$$\n${block.latex}\n$$`;
     return math;
   }
-  return document.createElement('hr');
+  const divider = document.createElement('hr');
+  divider.className = 'content-divider';
+  return divider;
 }
 
 export function renderSemanticDocument(

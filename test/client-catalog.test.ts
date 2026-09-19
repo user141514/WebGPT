@@ -5,6 +5,8 @@ import {
   conversationFromUrl,
   hasBoundConversation,
   initialConversationUrl,
+  loadingCatalogGroupId,
+  catalogGroupsWithLoading,
   conversationTarget,
   requestedConversationUrl
 } from '../src/client/catalog-view.ts';
@@ -118,6 +120,40 @@ test('constructs a direct conversation target from a pasted ChatGPT URL without 
   );
   assert.equal(conversationFromUrl('https://chatgpt.com/g/g-p-a'), null);
   assert.equal(conversationFromUrl('https://example.com/c/abc'), null);
+});
+
+test('renders a transient sidebar group when an in-flight direct bind is absent from the cached catalog', () => {
+  const groups = catalogGroupsWithLoading(
+    { projects: [], conversations: [] },
+    'https://chatgpt.com/g/g-p-missing/c/c1'
+  );
+  assert.deepEqual(groups, [{
+    id: 'g-p-missing',
+    title: 'Binding project…',
+    projectId: 'g-p-missing',
+    conversations: []
+  }]);
+
+  assert.deepEqual(
+    catalogGroupsWithLoading(
+      { projects: [], conversations: [] },
+      'https://chatgpt.com/c/standalone'
+    ),
+    [{ id: 'standalone', title: 'Chats', conversations: [] }]
+  );
+});
+
+test('maps an in-flight conversation URL to the sidebar group that owns its loading indicator', () => {
+  assert.equal(
+    loadingCatalogGroupId('https://chatgpt.com/g/g-p-a/c/c1'),
+    'g-p-a'
+  );
+  assert.equal(
+    loadingCatalogGroupId('https://chatgpt.com/c/standalone'),
+    'standalone'
+  );
+  assert.equal(loadingCatalogGroupId('https://chatgpt.com/g/g-p-a'), null);
+  assert.equal(loadingCatalogGroupId(null), null);
 });
 
 test('treats only canonical ChatGPT conversation URLs as bound conversation targets', () => {

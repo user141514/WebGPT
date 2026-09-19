@@ -55,6 +55,7 @@ export function resolveClientAsset(requestUrl: string, root = process.cwd()): Cl
     '/heartbeat.js',
     '/protocol.js',
     '/state.js',
+    '/theme.js',
     '/render-content.js',
     '/selection-epoch.js',
     '/smoke.js'

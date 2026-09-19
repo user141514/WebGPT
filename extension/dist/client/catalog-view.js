@@ -50,6 +50,29 @@ export function conversationFromUrl(url, title) {
         url: route.url
     };
 }
+export function loadingCatalogGroupId(url) {
+    if (!url)
+        return null;
+    const conversation = conversationFromUrl(url);
+    if (!conversation)
+        return null;
+    return conversation.projectId ?? 'standalone';
+}
+export function catalogGroupsWithLoading(catalog, loadingUrl) {
+    const groups = catalogGroups(catalog);
+    const loadingId = loadingCatalogGroupId(loadingUrl);
+    if (!loadingId || groups.some((group) => group.id === loadingId))
+        return groups;
+    if (loadingId === 'standalone') {
+        return [{ id: 'standalone', title: 'Chats', conversations: [] }, ...groups];
+    }
+    return [{
+            id: loadingId,
+            title: 'Binding project…',
+            projectId: loadingId,
+            conversations: []
+        }, ...groups];
+}
 export function hasBoundConversation(url) {
     return Boolean(url && conversationFromUrl(url));
 }

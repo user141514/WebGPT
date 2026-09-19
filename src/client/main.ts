@@ -1,5 +1,5 @@
 import { mergeCatalogs, type CatalogConversation, type ConversationCatalog } from '../catalog.js';
-import { catalogGroups, conversationFromUrl, conversationTarget, hasBoundConversation, initialConversationUrl } from './catalog-view.js';
+import { catalogGroups, catalogGroupsWithLoading, conversationFromUrl, conversationTarget, hasBoundConversation, initialConversationUrl, loadingCatalogGroupId } from './catalog-view.js';
 import {
   defaultExpandedCatalogGroups,
   ensureActiveCatalogGroupExpanded,
@@ -34,6 +34,7 @@ import {
   type ClientState
 } from './state.js';
 import { liveStatusPayload, smokePromptFromUrl } from './smoke.js';
+import { nextTheme, normalizeTheme, themeToggleView, type WebGptTheme } from './theme.js';
 
 interface PendingCatalogRequest {
   resolve: (result: CatalogResult) => void;
@@ -47,6 +48,8 @@ interface PendingConversationRequest {
 
 const ACTIVE_URL_KEY = 'chatgpt-web-driver.active-conversation-url';
 const CATALOG_TREE_KEY = 'chatgpt-web-driver.catalog-tree.expanded';
+const SIDEBAR_COLLAPSED_KEY = 'chatgpt-web-driver.sidebar-collapsed';
+const THEME_KEY = 'chatgpt-web-driver.theme';
 const EMPTY_CATALOG: ConversationCatalog = { projects: [], conversations: [] };
 
 function required<T extends Element>(selector: string): T {
@@ -74,6 +77,9 @@ const conversationUrlInput = required<HTMLInputElement>('#conversation-url-input
 const bindStatusElement = required<HTMLElement>('#bind-status');
 const bindStatusTitle = required<HTMLElement>('#bind-status-title');
 const bindStatusDetail = required<HTMLElement>('#bind-status-detail');
+const sidebarToggle = required<HTMLButtonElement>('#sidebar-toggle');
+const sidebarCollapse = required<HTMLButtonElement>('#sidebar-collapse');
+const themeToggle = required<HTMLButtonElement>('#theme-toggle');
 
 let state: ClientState = initialClientState();
 const turns: TranscriptTurn[] = [];
@@ -88,10 +94,16 @@ let expandedCatalogGroups = parseExpandedCatalogGroups(localStorage.getItem(CATA
 let catalogExpansionInitialized = localStorage.getItem(CATALOG_TREE_KEY) !== null;
 let catalogBusy = false;
 let conversationLoading = false;
+let conversationLoadingUrl: string | null = null;
 let historyHydrated = false;
 let historyMessageCount = 0;
 let catalogBootstrapped = false;
 let catalogStatusText = 'Waiting for extension…';
+let sidebarCollapsed = localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true';
+let theme: WebGptTheme = normalizeTheme(localStorage.getItem(THEME_KEY));
+if (localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === null && window.matchMedia('(max-width: 760px)').matches) {
+  sidebarCollapsed = true;
+}
 const pendingCatalogRequests = new Map<string, PendingCatalogRequest>();
 const pendingConversationRequests = new Map<string, PendingConversationRequest>();
 const selectionEpoch = new SelectionEpoch();
@@ -114,6 +126,37 @@ function appendEvent(value: unknown): void {
   eventLog.append(row);
   while (eventLog.children.length > 100) eventLog.firstElementChild?.remove();
   eventLog.scrollTop = eventLog.scrollHeight;
+}
+
+function applyTheme(): void {
+  document.body.dataset.theme = theme;
+  const view = themeToggleView(theme);
+  themeToggle.textContent = view.icon;
+  themeToggle.setAttribute('aria-label', view.label);
+  themeToggle.setAttribute('title', view.label);
+  themeToggle.setAttribute('aria-pressed', String(view.pressed));
+}
+
+function setTheme(next: WebGptTheme): void {
+  theme = next;
+  localStorage.setItem(THEME_KEY, theme);
+  applyTheme();
+}
+
+function applySidebarState(): void {
+  document.body.dataset.sidebarCollapsed = String(sidebarCollapsed);
+  sidebarToggle.setAttribute('aria-expanded', String(!sidebarCollapsed));
+}
+
+function setSidebarCollapsed(collapsed: boolean): void {
+  sidebarCollapsed = collapsed;
+  localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(collapsed));
+  applySidebarState();
+}
+
+function resizeComposer(): void {
+  textarea.style.height = '0px';
+  textarea.style.height = `${Math.min(textarea.scrollHeight, 190)}px`;
 }
 
 function markTranscriptDirty(forceFollow = false): void {
@@ -265,7 +308,7 @@ function expandActiveCatalogGroup(): void {
 
 function renderCatalog(): void {
   catalogList.replaceChildren();
-  const groups = catalogGroups(catalog);
+  const groups = catalogGroupsWithLoading(catalog, conversationLoadingUrl);
 
   if (!groups.length) {
     const empty = document.createElement('div');
@@ -275,6 +318,8 @@ function renderCatalog(): void {
     return;
   }
 
+  const loadingGroupId = loadingCatalogGroupId(conversationLoadingUrl);
+
   for (const group of groups) {
     const section = document.createElement('section');
     section.className = 'catalog-group';
@@ -282,12 +327,12 @@ function renderCatalog(): void {
     const expanded = expandedCatalogGroups.has(group.id);
     const activeInGroup = group.conversations.some((conversation) => conversation.url === activeConversationUrl);
     section.dataset.active = String(activeInGroup);
+    section.dataset.loading = String(group.id === loadingGroupId);
 
     const toggle = document.createElement('button');
     toggle.type = 'button';
     toggle.className = 'catalog-group-toggle';
     toggle.setAttribute('aria-expanded', String(expanded));
-    toggle.disabled = catalogBusy;
     toggle.addEventListener('click', () => {
       expandedCatalogGroups = toggleCatalogGroup(expandedCatalogGroups, group.id);
       persistCatalogExpansion();
@@ -304,7 +349,10 @@ function renderCatalog(): void {
 
     const count = document.createElement('span');
     count.className = 'catalog-group-count';
-    count.textContent = group.conversations.length ? String(group.conversations.length) : '—';
+    const groupLoading = group.id === loadingGroupId;
+    count.dataset.loading = String(groupLoading);
+    count.setAttribute('aria-label', groupLoading ? 'Loading conversation' : `${group.conversations.length} conversations`);
+    count.textContent = groupLoading ? '' : (group.conversations.length ? String(group.conversations.length) : '—');
 
     toggle.append(chevron, label, count);
     section.append(toggle);
@@ -327,7 +375,7 @@ function renderCatalog(): void {
       button.textContent = conversation.title;
       button.title = conversation.url;
       button.dataset.active = String(activeConversationUrl === conversation.url);
-      button.disabled = busy(state.phase) || conversationLoading || catalogBusy;
+      button.disabled = busy(state.phase) || conversationLoading;
       button.addEventListener('click', () => selectConversation(conversation));
       children.append(button);
     }
@@ -505,6 +553,7 @@ async function resolveConversation(
   const selectionToken = selectionEpoch.begin();
   const previousUrl = activeConversationUrl;
   conversationLoading = true;
+  conversationLoadingUrl = direct.url;
   bindStatus = { state: 'binding', url: direct.url };
   catalogStatusText = mode === 'navigate'
     ? 'Switching the existing ChatGPT tab…'
@@ -518,6 +567,7 @@ async function resolveConversation(
 
   if (!result.ok) {
     conversationLoading = false;
+    conversationLoadingUrl = null;
     bindStatus = { state: 'error', error: result.error };
     catalogStatusText = result.error;
     render();
@@ -544,6 +594,7 @@ async function resolveConversation(
   activeTurn = null;
   markTranscriptDirty(true);
   conversationLoading = false;
+  conversationLoadingUrl = null;
   bindStatus = {
     state: 'bound',
     title: activeConversationTitle,
@@ -642,6 +693,7 @@ form.addEventListener('submit', (event) => {
   turns.push(activeTurn);
   markTranscriptDirty(true);
   textarea.value = '';
+  resizeComposer();
   dispatch({ type: 'submit.local', clientRequestId });
   appendEvent({
     source: CLIENT_SOURCE,
@@ -670,6 +722,12 @@ catalogRefresh.addEventListener('click', () => {
   void loadCatalog();
 });
 
+sidebarToggle.addEventListener('click', () => setSidebarCollapsed(!sidebarCollapsed));
+sidebarCollapse.addEventListener('click', () => setSidebarCollapsed(true));
+themeToggle.addEventListener('click', () => setTheme(nextTheme(theme)));
+
+textarea.addEventListener('input', resizeComposer);
+
 textarea.addEventListener('keydown', (event) => {
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault();
@@ -677,6 +735,9 @@ textarea.addEventListener('keydown', (event) => {
   }
 });
 
+applyTheme();
+applySidebarState();
+resizeComposer();
 sendHello();
 window.setInterval(() => {
   sendHello();

@@ -3,71 +3,80 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ChatGPT Web Driver Client</title>
+  <title>WebGPT</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
-<body>
+<body data-sidebar-collapsed="false">
   <div class="shell">
-    <aside class="sidebar">
-      <div class="brand">Web Driver</div>
-      <div class="provider-card">
-        <span class="provider-dot"></span>
-        <div>
-          <strong>ChatGPT Web</strong>
-          <small id="bridge-badge">Extension disconnected</small>
+    <aside class="sidebar" id="sidebar">
+      <header class="sidebar-header">
+        <div class="brand">WebGPT</div>
+        <div class="sidebar-header-actions">
+          <button id="theme-toggle" class="icon-button theme-toggle" type="button" aria-label="Switch to light theme" title="Switch to light theme">☀</button>
+          <button id="sidebar-collapse" class="icon-button sidebar-collapse" type="button" aria-label="Collapse sidebar">‹</button>
         </div>
-      </div>
+      </header>
 
-      <section class="catalog-panel">
+      <section class="sidebar-bind">
         <form id="conversation-url-form" class="conversation-url-form">
-          <input id="conversation-url-input" type="text" placeholder="Paste URL of an already-open ChatGPT conversation" autocomplete="off" spellcheck="false">
+          <input id="conversation-url-input" type="text" placeholder="Paste ChatGPT URL" autocomplete="off" spellcheck="false">
           <button type="submit">Bind</button>
         </form>
-        <div class="bind-note">Existing tab only · no tab creation · no page scrolling</div>
+
         <div id="bind-status" class="bind-status" data-state="idle" role="status" aria-live="polite">
           <span class="bind-status-dot" aria-hidden="true"></span>
           <div class="bind-status-copy">
             <strong id="bind-status-title">No conversation bound</strong>
-            <small id="bind-status-detail">Paste the URL of an already-open ChatGPT conversation.</small>
+            <small id="bind-status-detail">Bind an already-open ChatGPT conversation.</small>
           </div>
         </div>
-        <div class="catalog-heading">
-          <span>Cached index</span>
-          <span class="catalog-actions">
-            <button id="catalog-refresh" type="button">Reload cache</button>
-          </span>
-        </div>
-        <div id="catalog-status" class="catalog-status">Waiting for extension…</div>
-        <nav id="catalog-list" class="catalog-list" aria-label="ChatGPT conversations"></nav>
       </section>
 
-      <details class="debug-panel">
-        <summary>Event stream</summary>
-        <div id="event-log"></div>
-      </details>
+      <section class="catalog-panel">
+        <div class="catalog-heading">
+          <span>Projects</span>
+          <button id="catalog-refresh" class="icon-button" type="button" title="Reload cached index" aria-label="Reload cached index">↻</button>
+        </div>
+        <div id="catalog-status" class="catalog-status">Waiting for extension…</div>
+        <nav id="catalog-list" class="catalog-list" aria-label="ChatGPT projects and conversations"></nav>
+      </section>
+
+      <footer class="sidebar-footer">
+        <div class="provider-row">
+          <span class="provider-dot"></span>
+          <span>ChatGPT Web</span>
+          <small id="bridge-badge">Extension disconnected</small>
+        </div>
+
+        <details class="debug-panel">
+          <summary>Event stream</summary>
+          <div id="event-log"></div>
+        </details>
+      </footer>
     </aside>
 
     <main class="workspace">
       <header class="topbar">
-        <div>
-          <h1 id="conversation-title">No page bound</h1>
-          <p id="conversation-subtitle">Bind the URL of an already-open ChatGPT conversation.</p>
+        <button id="sidebar-toggle" class="icon-button topbar-sidebar-toggle" type="button" aria-label="Toggle sidebar">☰</button>
+        <div class="topbar-copy">
+          <h1 id="conversation-title">New chat</h1>
+          <p id="conversation-subtitle">Bind a ChatGPT conversation or choose one from the sidebar.</p>
         </div>
         <span id="phase-badge" class="phase-badge">disconnected</span>
       </header>
 
       <section class="conversation">
         <div id="empty-state" class="empty-state">
-          <h2>Bind an existing ChatGPT conversation</h2>
-          <p>Paste the URL of a conversation that is already open in Chrome. This client maps and continues that exact page.</p>
+          <h2>What can I help with?</h2>
+          <p>Bind an existing ChatGPT conversation or choose a conversation from the sidebar.</p>
         </div>
         <div id="transcript" class="transcript"></div>
       </section>
 
       <footer class="composer-wrap">
         <form id="composer-form" class="composer">
-          <textarea id="composer-input" rows="1" placeholder="Bind a ChatGPT URL first" aria-label="Message ChatGPT"></textarea>
-          <button id="composer-send" type="submit" disabled>Send</button>
+          <textarea id="composer-input" rows="1" placeholder="Message ChatGPT" aria-label="Message ChatGPT"></textarea>
+          <button id="composer-send" type="submit" disabled aria-label="Send message">Send</button>
         </form>
         <div class="composer-note">Enter to send · Shift+Enter for a new line</div>
       </footer>

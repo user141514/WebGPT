@@ -44,6 +44,7 @@ export function resolveClientAsset(requestUrl, root = process.cwd()) {
         '/heartbeat.js',
         '/protocol.js',
         '/state.js',
+        '/theme.js',
         '/render-content.js',
         '/selection-epoch.js',
         '/smoke.js'

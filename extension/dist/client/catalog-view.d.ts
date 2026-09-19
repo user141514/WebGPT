@@ -12,6 +12,8 @@ export interface ConversationTarget {
 }
 export declare function catalogGroups(catalog: ConversationCatalog): CatalogGroup[];
 export declare function conversationFromUrl(url: string, title?: string): CatalogConversation | null;
+export declare function loadingCatalogGroupId(url: string | null | undefined): string | null;
+export declare function catalogGroupsWithLoading(catalog: ConversationCatalog, loadingUrl: string | null | undefined): CatalogGroup[];
 export declare function hasBoundConversation(url: string | null | undefined): boolean;
 export declare function conversationTarget(conversation: CatalogConversation): ConversationTarget;
 export declare function initialConversationUrl(clientUrl: string, storedUrl?: string | null): string | null;

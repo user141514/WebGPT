@@ -31,7 +31,7 @@ test('resolves only the explicit client assets and rejects traversal or unknown 
     file: join(root, 'client', 'extension-control.html'),
     contentType: 'text/html; charset=utf-8'
   });
-  for (const module of ['bind-status.js', 'catalog-view.js', 'catalog-tree.js', 'conversation-view.js', 'conversation-id.js', 'heartbeat.js', 'protocol.js', 'state.js', 'render-content.js', 'selection-epoch.js', 'smoke.js']) {
+  for (const module of ['bind-status.js', 'catalog-view.js', 'catalog-tree.js', 'conversation-view.js', 'conversation-id.js', 'heartbeat.js', 'protocol.js', 'state.js', 'theme.js', 'render-content.js', 'selection-epoch.js', 'smoke.js']) {
     assert.deepEqual(resolveClientAsset(`/${module}`, root), {
       file: join(root, 'extension', 'dist', 'client', module),
       contentType: 'text/javascript; charset=utf-8'
