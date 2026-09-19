@@ -1,0 +1,85 @@
+import { parseChatGptRoute } from '../catalog.js';
+export function catalogGroups(catalog) {
+    const standalone = catalog.conversations.filter((conversation) => !conversation.projectId);
+    const grouped = new Map();
+    for (const conversation of catalog.conversations) {
+        if (!conversation.projectId)
+            continue;
+        const list = grouped.get(conversation.projectId) ?? [];
+        list.push(conversation);
+        grouped.set(conversation.projectId, list);
+    }
+    const result = [];
+    if (standalone.length) {
+        result.push({
+            id: 'standalone',
+            title: 'Chats',
+            conversations: standalone
+        });
+    }
+    const indexedProjectIds = new Set();
+    for (const project of catalog.projects) {
+        indexedProjectIds.add(project.projectId);
+        result.push({
+            id: project.projectId,
+            title: project.title,
+            projectId: project.projectId,
+            conversations: grouped.get(project.projectId) ?? []
+        });
+    }
+    for (const [projectId, conversations] of grouped) {
+        if (indexedProjectIds.has(projectId))
+            continue;
+        result.push({
+            id: projectId,
+            title: projectId,
+            projectId,
+            conversations
+        });
+    }
+    return result;
+}
+export function conversationFromUrl(url, title) {
+    const route = parseChatGptRoute(url);
+    if (route?.kind !== 'conversation')
+        return null;
+    return {
+        ...(route.projectId ? { projectId: route.projectId } : {}),
+        conversationId: route.conversationId,
+        title: title?.trim() || route.conversationId,
+        url: route.url
+    };
+}
+export function hasBoundConversation(url) {
+    return Boolean(url && conversationFromUrl(url));
+}
+export function conversationTarget(conversation) {
+    return {
+        conversationId: conversation.url,
+        externalUrl: conversation.url,
+        title: conversation.title
+    };
+}
+export function initialConversationUrl(clientUrl, storedUrl) {
+    const explicit = requestedConversationUrl(clientUrl);
+    if (explicit)
+        return explicit;
+    try {
+        const fresh = new URL(clientUrl).searchParams.get('fresh') === '1';
+        if (fresh)
+            return null;
+    }
+    catch {
+        return storedUrl?.trim() || null;
+    }
+    return storedUrl?.trim() || null;
+}
+export function requestedConversationUrl(clientUrl) {
+    try {
+        const value = new URL(clientUrl).searchParams.get('conversation')?.trim() ?? '';
+        return value || null;
+    }
+    catch {
+        return null;
+    }
+}

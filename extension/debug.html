@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ChatGPT Web Driver</title>
+  <link rel="stylesheet" href="debug.css">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>ChatGPT Web Driver</h1>
+      <div id="driver-status">idle</div>
+    </header>
+    <form id="driver-form">
+      <textarea id="driver-prompt" rows="5" placeholder="Prompt"></textarea>
+      <button type="submit">Send</button>
+    </form>
+    <section>
+      <h2>Assistant</h2>
+      <pre id="driver-response"></pre>
+    </section>
+    <section>
+      <h2>Events</h2>
+      <div id="driver-log"></div>
+    </section>
+  </main>
+  <script type="module" src="dist/extension/debug.js"></script>
+</body>
+</html>

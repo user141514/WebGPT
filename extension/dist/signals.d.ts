@@ -1,0 +1,13 @@
+import type { SemanticDocument } from './content/model.js';
+import type { DomElement, DomSurface } from './dom.js';
+export declare function findPrompt(surface: DomSurface): DomElement | null;
+export declare function findSendButton(surface: DomSurface): DomElement | null;
+export declare function injectPrompt(surface: DomSurface, prompt: DomElement, text: string): void;
+export declare function userCount(surface: DomSurface): number;
+export declare function assistantCount(surface: DomSurface): number;
+export declare function latestAssistant(surface: DomSurface): DomElement | null;
+export declare function latestAssistantText(surface: DomSurface): string;
+export declare function latestAssistantSignature(surface: DomSurface): string;
+export declare function latestAssistantDocument(surface: DomSurface): SemanticDocument | null;
+export declare function isGenerating(surface: DomSurface): boolean;
+export declare function hasCompletionAction(surface: DomSurface): boolean;

@@ -1,0 +1,19 @@
+{
+  "name": "chatgpt-web-driver",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "tsx --test test/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc",
+    "build:extension": "node scripts/build-extension.mjs",
+    "client:serve": "npm run build:extension && node extension/dist/client/server.js",
+    "check": "npm test && npm run typecheck && npm run build:extension",
+    "driver": "node scripts/web-driver.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.0"
+  }
+}
